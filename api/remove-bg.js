@@ -40,20 +40,25 @@ export default async function handler(req, res) {
     }
 
     try {
+      const fileBuffer = fs.readFileSync(file.filepath)
+
       const formData = new FormData()
-      formData.append('image_file', fs.createReadStream(file.filepath), {
+      formData.append('image_file', fileBuffer, {
         filename: file.originalFilename || 'signature.jpg',
         contentType: file.mimetype || 'image/jpeg',
       })
       formData.append('size', 'auto')
 
+      const multipartBody = formData.getBuffer()
+      const headers = formData.getHeaders()
+
       const response = await fetch('https://api.remove.bg/v1.0/removebg', {
         method: 'POST',
         headers: {
           'X-Api-Key': process.env.REMOVE_BG_API_KEY,
-          ...formData.getHeaders(),
+          ...headers,
         },
-        body: formData,
+        body: multipartBody,
       })
 
       if (!response.ok) {
