@@ -1,14 +1,21 @@
 import formidable from 'formidable'
 import fs from 'fs'
 import FormData from 'form-data'
-import fetch from 'node-fetch'
 
 export const config = {
   api: { bodyParser: false },
 }
 
+const ALLOWED_ORIGINS = [
+  'https://tailorpady.web.app',
+  'http://localhost:5173',
+]
+
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  const origin = req.headers.origin
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+  }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
@@ -54,7 +61,8 @@ export default async function handler(req, res) {
         return res.status(response.status).json({ error: errorText })
       }
 
-      const buffer = await response.buffer()
+      const arrayBuffer = await response.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
       const base64 = buffer.toString('base64')
 
       return res.status(200).json({ image: `data:image/png;base64,${base64}` })
