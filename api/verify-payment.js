@@ -26,7 +26,6 @@ export default async function handler(req, res) {
   }
 
   const { reference, uid, billingCycle } = req.body
-
   if (!reference || !uid || !billingCycle) {
     return res.status(400).json({ error: 'Missing reference, uid or billingCycle' })
   }
@@ -45,19 +44,18 @@ export default async function handler(req, res) {
     if (!verifyData.status || verifyData.data.status !== 'success') {
       return res.status(400).json({ error: 'Transaction not successful' })
     }
-
     if (verifyData.data.amount !== plan.amount) {
       return res.status(400).json({ error: 'Amount mismatch' })
     }
-
     if (verifyData.data.metadata?.uid !== uid) {
       return res.status(400).json({ error: 'UID mismatch' })
     }
 
     const customerCode = verifyData.data.customer?.customer_code
+    const paidAt = new Date().toISOString()
     const nextRenewal = new Date(
       Date.now() + (billingCycle === 'monthly' ? 30 : 365) * 24 * 60 * 60 * 1000
-    )
+    ).toISOString()
 
     const db = getFirestore()
 
@@ -67,15 +65,29 @@ export default async function handler(req, res) {
       billingCycle,
       customerCode: customerCode ?? null,
       paymentFailed: false,
-      nextRenewal: nextRenewal.toISOString(),
-      updatedAt: new Date().toISOString(),
+      nextRenewal,
+      updatedAt: paidAt,
     }, { merge: true })
+
+    await db.doc(`users/${uid}/subscriptionPayments/${reference}`).set({
+      reference,
+      amount: plan.amount,
+      plan: plan.label,
+      billingCycle,
+      status: 'paid',
+      paidAt,
+    })
 
     if (customerCode) {
       await db.doc(`paystackCustomers/${customerCode}`).set({ uid }, { merge: true })
     }
 
-    return res.status(200).json({ success: true })
+    return res.status(200).json({
+      success: true,
+      plan: plan.label,
+      billingCycle,
+      nextRenewal,
+    })
   } catch (error) {
     return res.status(500).json({ error: 'Internal server error' })
   }

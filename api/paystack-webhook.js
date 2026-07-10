@@ -34,14 +34,12 @@ export default async function handler(req, res) {
 
   const event = JSON.parse(rawBody.toString())
   const customerCode = event.data?.customer?.customer_code
-
   if (!customerCode) {
     return res.status(200).end()
   }
 
   const db = getFirestore()
   const uid = await findUidByCustomerCode(db, customerCode)
-
   if (!uid) {
     return res.status(200).end()
   }
@@ -50,16 +48,32 @@ export default async function handler(req, res) {
 
   if (event.event === 'charge.success' && event.data.plan?.interval) {
     const isAnnual = event.data.plan.interval === 'annually'
-    const nextRenewal = new Date(Date.now() + (isAnnual ? 365 : 30) * 24 * 60 * 60 * 1000)
+    const paidAt = new Date().toISOString()
+    const nextRenewal = new Date(Date.now() + (isAnnual ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString()
+    const planLabel = isAnnual ? 'Pro Annual' : 'Pro Monthly'
+    const billingCycle = isAnnual ? 'annual' : 'monthly'
+    const reference = event.data.reference
+
     await ref.set({
       isPremium: true,
-      plan: isAnnual ? 'Pro Annual' : 'Pro Monthly',
-      billingCycle: isAnnual ? 'annual' : 'monthly',
+      plan: planLabel,
+      billingCycle,
       subscriptionCode: event.data.subscription?.subscription_code ?? null,
       paymentFailed: false,
-      nextRenewal: nextRenewal.toISOString(),
-      updatedAt: new Date().toISOString(),
+      nextRenewal,
+      updatedAt: paidAt,
     }, { merge: true })
+
+    if (reference) {
+      await db.doc(`users/${uid}/subscriptionPayments/${reference}`).set({
+        reference,
+        amount: event.data.amount,
+        plan: planLabel,
+        billingCycle,
+        status: 'paid',
+        paidAt,
+      })
+    }
   }
 
   if (event.event === 'subscription.disable' || event.event === 'subscription.not_renew') {
@@ -70,10 +84,22 @@ export default async function handler(req, res) {
   }
 
   if (event.event === 'invoice.payment_failed') {
+    const failedAt = new Date().toISOString()
+    const reference = event.data.invoice_code ?? event.data.reference ?? `failed-${Date.now()}`
+
     await ref.set({
       paymentFailed: true,
-      updatedAt: new Date().toISOString(),
+      updatedAt: failedAt,
     }, { merge: true })
+
+    await db.doc(`users/${uid}/subscriptionPayments/${reference}`).set({
+      reference,
+      amount: event.data.amount ?? null,
+      plan: null,
+      billingCycle: null,
+      status: 'failed',
+      paidAt: failedAt,
+    })
   }
 
   return res.status(200).end()
