@@ -85,7 +85,7 @@ async function handleSubscriptionCreate(ref, event) {
 
 async function handleSubscriptionDisable(ref) {
   await ref.set({
-    isPremium: false,
+    cancelAtPeriodEnd: true,
     updatedAt: new Date().toISOString(),
   }, { merge: true })
 }
@@ -141,6 +141,13 @@ export default async function handler(req, res) {
 
   if (event.event === 'subscription.disable' || event.event === 'subscription.not_renew') {
     await handleSubscriptionDisable(ref)
+  }
+
+  if (event.event === 'subscription.enable') {
+    await ref.set({
+      cancelAtPeriodEnd: false,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true })
   }
 
   if (event.event === 'invoice.payment_failed') {
