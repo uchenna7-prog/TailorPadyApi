@@ -96,6 +96,7 @@ async function handlePaymentFailed(db, ref, event, uid) {
 
   await ref.set({
     paymentFailed: true,
+    cancelAtPeriodEnd: true,
     updatedAt: failedAt,
   }, { merge: true })
 
