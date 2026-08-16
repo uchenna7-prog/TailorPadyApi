@@ -1,4 +1,5 @@
 import { getFirebaseAdmin, getFirestore } from './lib/firebaseAdmin.js'
+import { enforceRateLimit, RateLimitError } from './lib/rateLimit.js'
 
 const ALLOWED_ORIGINS = [
   'https://tailorpady.web.app',
@@ -8,6 +9,10 @@ const ALLOWED_ORIGINS = [
 const CODE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
 const CODE_LENGTH = 6
 const MAX_ATTEMPTS = 5
+
+const RATE_LIMIT_KEY = 'create-user-profile'
+const RATE_LIMIT_MAX = 5
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 
 function generateCode() {
   let code = ''
@@ -53,6 +58,8 @@ export default async function handler(req, res) {
     const uid = decoded.uid
     const db = getFirestore()
 
+    await enforceRateLimit(db, uid, RATE_LIMIT_KEY, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)
+
     const userRef = db.doc(`users/${uid}`)
     const userSnap = await userRef.get()
 
@@ -75,32 +82,34 @@ export default async function handler(req, res) {
     const code = await generateUniqueCode(db)
     const createdAt = new Date().toISOString()
 
-    await userRef.set({
-      referralCode: code,
-      referredBy: referrerUid,
-      createdAt,
+    const result = await db.runTransaction(async (tx) => {
+      const freshSnap = await tx.get(userRef)
+      if (freshSnap.exists) {
+        return { created: false, ...freshSnap.data() }
+      }
+
+      tx.set(userRef, { referralCode: code, referredBy: referrerUid, createdAt })
+      tx.set(db.doc(`referralCodes/${code}`), { uid })
+
+      if (referrerUid) {
+        tx.set(db.doc(`referrals/${uid}`), {
+          referrerUid,
+          referredUid: uid,
+          referralCode: normalizedCode,
+          status: 'pending',
+          createdAt,
+          activatedAt: null,
+        })
+      }
+
+      return { created: true, referralCode: code, referredBy: referrerUid, createdAt }
     })
 
-    await db.doc(`referralCodes/${code}`).set({ uid })
-
-    if (referrerUid) {
-      await db.doc(`referrals/${uid}`).set({
-        referrerUid,
-        referredUid: uid,
-        referralCode: normalizedCode,
-        status: 'pending',
-        createdAt,
-        activatedAt: null,
-      })
-    }
-
-    return res.status(200).json({
-      created: true,
-      referralCode: code,
-      referredBy: referrerUid,
-      createdAt,
-    })
+    return res.status(200).json(result)
   } catch (error) {
+    if (error instanceof RateLimitError) {
+      return res.status(429).json({ error: error.message })
+    }
     return res.status(500).json({ error: 'Internal server error' })
   }
 }
