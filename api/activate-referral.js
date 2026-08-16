@@ -1,4 +1,5 @@
 import { getFirebaseAdmin, getFirestore } from './lib/firebaseAdmin.js'
+import { enforceRateLimit, RateLimitError } from './lib/rateLimit.js'
 
 const ALLOWED_ORIGINS = [
   'https://tailorpady.web.app',
@@ -6,6 +7,10 @@ const ALLOWED_ORIGINS = [
 ]
 
 const REWARD_DAYS = 30
+
+const RATE_LIMIT_KEY = 'activate-referral'
+const RATE_LIMIT_MAX = 20
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 
 export default async function handler(req, res) {
   const origin = req.headers.origin
@@ -33,6 +38,8 @@ export default async function handler(req, res) {
     const decoded = await admin.auth().verifyIdToken(idToken)
     const uid = decoded.uid
     const db = getFirestore()
+
+    await enforceRateLimit(db, uid, RATE_LIMIT_KEY, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)
 
     const referralRef = db.doc(`referrals/${uid}`)
     const referralSnap = await referralRef.get()
@@ -81,6 +88,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ activated: true, reason: 'newly_activated' })
   } catch (error) {
+    if (error instanceof RateLimitError) {
+      return res.status(429).json({ error: error.message })
+    }
     return res.status(500).json({ error: 'Internal server error' })
   }
 }
