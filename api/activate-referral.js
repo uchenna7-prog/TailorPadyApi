@@ -12,6 +12,10 @@ const RATE_LIMIT_KEY = 'activate-referral'
 const RATE_LIMIT_MAX = 20
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 
+const REFERRER_PAYOUT_KEY = 'referrer-payout'
+const REFERRER_PAYOUT_MAX = 5
+const REFERRER_PAYOUT_WINDOW_MS = 24 * 60 * 60 * 1000
+
 export default async function handler(req, res) {
   const origin = req.headers.origin
   if (ALLOWED_ORIGINS.includes(origin)) {
@@ -63,10 +67,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ activated: false, reason: 'not_active_yet' })
     }
 
+    try {
+      await enforceRateLimit(db, referral.referrerUid, REFERRER_PAYOUT_KEY, REFERRER_PAYOUT_MAX, REFERRER_PAYOUT_WINDOW_MS)
+    } catch (limitError) {
+      if (limitError instanceof RateLimitError) {
+        return res.status(200).json({ activated: false, reason: 'referrer_payout_limit' })
+      }
+      throw limitError
+    }
+
     const activatedAt = new Date().toISOString()
     const referrerRef = db.doc(`users/${referral.referrerUid}/settings/premium`)
 
-    await db.runTransaction(async (tx) => {
+    const result = await db.runTransaction(async (tx) => {
+      const freshReferralSnap = await tx.get(referralRef)
+      if (!freshReferralSnap.exists || freshReferralSnap.data().status === 'activated') {
+        return { activated: true, reason: 'already_activated' }
+      }
+
       const referrerSnap = await tx.get(referrerRef)
       const current = referrerSnap.exists ? referrerSnap.data() : {}
       const baseDate = current.nextRenewal && new Date(current.nextRenewal) > new Date()
@@ -84,9 +102,11 @@ export default async function handler(req, res) {
         status: 'activated',
         activatedAt,
       }, { merge: true })
+
+      return { activated: true, reason: 'newly_activated' }
     })
 
-    return res.status(200).json({ activated: true, reason: 'newly_activated' })
+    return res.status(200).json(result)
   } catch (error) {
     if (error instanceof RateLimitError) {
       return res.status(429).json({ error: error.message })
