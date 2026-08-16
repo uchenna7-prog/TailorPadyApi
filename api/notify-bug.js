@@ -11,18 +11,27 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { title, description, section, severity, screenshotUrl, userEmail } = req.body
-
-  const text =
-    `🐛 *New Bug Report*\n\n` +
-    `*Title:* ${title}\n` +
-    `*Severity:* ${severity}\n` +
-    `*Section:* ${section}\n` +
-    `*From:* ${userEmail || 'unknown'}\n\n` +
-    `${description}` +
-    (screenshotUrl ? `\n\n[Screenshot](${screenshotUrl})` : '')
-
   try {
+    const body = req.body || {}
+    const { title, description, section, severity, screenshotUrl, userEmail } = body
+
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Missing title or description', received: body })
+    }
+
+    const text =
+      `🐛 *New Bug Report*\n\n` +
+      `*Title:* ${title}\n` +
+      `*Severity:* ${severity}\n` +
+      `*Section:* ${section}\n` +
+      `*From:* ${userEmail || 'unknown'}\n\n` +
+      `${description}` +
+      (screenshotUrl ? `\n\n[Screenshot](${screenshotUrl})` : '')
+
+    if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+      return res.status(500).json({ error: 'Missing Telegram env vars' })
+    }
+
     const tgRes = await fetch(
       `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
       {
@@ -43,6 +52,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true })
   } catch (err) {
-    return res.status(500).json({ error: 'Internal error' })
+    return res.status(500).json({ error: 'Internal error', message: err.message })
   }
 }
