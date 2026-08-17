@@ -57,6 +57,7 @@ async function handleChargeSuccess(db, ref, event, uid) {
     plan: planLabel,
     billingCycle,
     paymentFailed: false,
+    cancelAtPeriodEnd: false,
     nextRenewal,
     updatedAt: paidAt,
   }, { merge: true })
@@ -79,6 +80,7 @@ async function handleSubscriptionCreate(ref, event) {
   await ref.set({
     subscriptionCode: event.data.subscription_code ?? null,
     emailToken: event.data.email_token ?? null,
+    cancelAtPeriodEnd: false,
     updatedAt: new Date().toISOString(),
   }, { merge: true })
 }
