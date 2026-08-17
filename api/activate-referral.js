@@ -7,6 +7,8 @@ const ALLOWED_ORIGINS = [
 ]
 
 const REWARD_DAYS = 30
+const REFERRALS_PER_REWARD = 5
+const MAX_REWARDS_PER_REFERRER = 3
 
 const RATE_LIMIT_KEY = 'activate-referral'
 const RATE_LIMIT_MAX = 20
@@ -67,22 +69,82 @@ export default async function handler(req, res) {
       return res.status(200).json({ activated: false, reason: 'not_active_yet' })
     }
 
+    const activatedAt = new Date().toISOString()
+
+    const markResult = await db.runTransaction(async (tx) => {
+      const freshReferralSnap = await tx.get(referralRef)
+      if (!freshReferralSnap.exists || freshReferralSnap.data().status === 'activated') {
+        return { alreadyActivated: true }
+      }
+
+      tx.set(referralRef, {
+        status: 'activated',
+        activatedAt,
+        rewardGranted: false,
+      }, { merge: true })
+
+      return { alreadyActivated: false }
+    })
+
+    if (markResult.alreadyActivated) {
+      return res.status(200).json({ activated: true, reason: 'already_activated' })
+    }
+
+    const referrerUid = referral.referrerUid
+
+    const activatedForReferrerSnap = await db.collection('referrals')
+      .where('referrerUid', '==', referrerUid)
+      .where('status', '==', 'activated')
+      .get()
+
+    const totalActivated = activatedForReferrerSnap.size
+    const rewardDue = totalActivated % REFERRALS_PER_REWARD === 0
+
+    if (!rewardDue) {
+      return res.status(200).json({ activated: true, reason: 'newly_activated', rewardGranted: false })
+    }
+
+    const rewardedForReferrerSnap = await db.collection('referrals')
+      .where('referrerUid', '==', referrerUid)
+      .where('rewardGranted', '==', true)
+      .get()
+
+    if (rewardedForReferrerSnap.size >= MAX_REWARDS_PER_REFERRER) {
+      return res.status(200).json({ activated: true, reason: 'reward_cap_reached', rewardGranted: false })
+    }
+
     try {
-      await enforceRateLimit(db, referral.referrerUid, REFERRER_PAYOUT_KEY, REFERRER_PAYOUT_MAX, REFERRER_PAYOUT_WINDOW_MS)
+      await enforceRateLimit(db, referrerUid, REFERRER_PAYOUT_KEY, REFERRER_PAYOUT_MAX, REFERRER_PAYOUT_WINDOW_MS)
     } catch (limitError) {
       if (limitError instanceof RateLimitError) {
-        return res.status(200).json({ activated: false, reason: 'referrer_payout_limit' })
+        return res.status(200).json({ activated: true, reason: 'referrer_payout_limit', rewardGranted: false })
       }
       throw limitError
     }
 
-    const activatedAt = new Date().toISOString()
-    const referrerRef = db.doc(`users/${referral.referrerUid}/settings/premium`)
+    const contributingNames = activatedForReferrerSnap.docs
+      .map(d => d.data())
+      .sort((a, b) => (a.activatedAt || '').localeCompare(b.activatedAt || ''))
+      .slice(-REFERRALS_PER_REWARD)
+      .map(r => r.referredDisplayName)
+      .filter(Boolean)
 
-    const result = await db.runTransaction(async (tx) => {
+    const referrerRef = db.doc(`users/${referrerUid}/settings/premium`)
+    const referralsCollectionRef = db.collection('referrals')
+
+    const rewardResult = await db.runTransaction(async (tx) => {
       const freshReferralSnap = await tx.get(referralRef)
-      if (!freshReferralSnap.exists || freshReferralSnap.data().status === 'activated') {
-        return { activated: true, reason: 'already_activated' }
+      if (!freshReferralSnap.exists || freshReferralSnap.data().rewardGranted === true) {
+        return { rewardGranted: true, reason: 'already_rewarded' }
+      }
+
+      const rewardedRecheckSnap = await tx.get(
+        referralsCollectionRef
+          .where('referrerUid', '==', referrerUid)
+          .where('rewardGranted', '==', true)
+      )
+      if (rewardedRecheckSnap.size >= MAX_REWARDS_PER_REFERRER) {
+        return { rewardGranted: false, reason: 'reward_cap_reached' }
       }
 
       const referrerSnap = await tx.get(referrerRef)
@@ -91,22 +153,31 @@ export default async function handler(req, res) {
         ? new Date(current.nextRenewal)
         : new Date()
       const extendedRenewal = new Date(baseDate.getTime() + REWARD_DAYS * 24 * 60 * 60 * 1000).toISOString()
+      const hasActiveSubscription = !!current.subscriptionCode
 
-      tx.set(referrerRef, {
+      const premiumUpdate = {
         isPremium: true,
         nextRenewal: extendedRenewal,
         updatedAt: activatedAt,
-      }, { merge: true })
+      }
+      if (!hasActiveSubscription) {
+        premiumUpdate.cancelAtPeriodEnd = true
+      }
+
+      tx.set(referrerRef, premiumUpdate, { merge: true })
 
       tx.set(referralRef, {
-        status: 'activated',
-        activatedAt,
+        rewardGranted: true,
+        rewardDays: REWARD_DAYS,
+        rewardBatchCount: totalActivated,
+        contributingNames,
+        referrerAcked: false,
       }, { merge: true })
 
-      return { activated: true, reason: 'newly_activated' }
+      return { rewardGranted: true, reason: 'newly_rewarded' }
     })
 
-    return res.status(200).json(result)
+    return res.status(200).json({ activated: true, ...rewardResult })
   } catch (error) {
     if (error instanceof RateLimitError) {
       return res.status(429).json({ error: error.message })
