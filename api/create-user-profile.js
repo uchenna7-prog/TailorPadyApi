@@ -108,6 +108,7 @@ export default async function handler(req, res) {
           referralCode: normalizedCode,
           referredDisplayName,
           status: 'pending',
+          rewardGranted: false,
           referrerAcked: false,
           createdAt,
           activatedAt: null,
