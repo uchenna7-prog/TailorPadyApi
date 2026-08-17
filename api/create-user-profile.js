@@ -79,6 +79,16 @@ export default async function handler(req, res) {
       }
     }
 
+    let referredDisplayName = null
+    if (referrerUid) {
+      try {
+        const authUser = await admin.auth().getUser(uid)
+        referredDisplayName = authUser.displayName || null
+      } catch {
+        referredDisplayName = null
+      }
+    }
+
     const code = await generateUniqueCode(db)
     const createdAt = new Date().toISOString()
 
@@ -96,7 +106,9 @@ export default async function handler(req, res) {
           referrerUid,
           referredUid: uid,
           referralCode: normalizedCode,
+          referredDisplayName,
           status: 'pending',
+          referrerAcked: false,
           createdAt,
           activatedAt: null,
         })
