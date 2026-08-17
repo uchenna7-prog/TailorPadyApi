@@ -57,8 +57,8 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Not authorized to acknowledge this referral' })
     }
 
-    if (referral.status !== 'activated') {
-      return res.status(200).json({ acknowledged: false, reason: 'not_activated' })
+    if (referral.rewardGranted !== true) {
+      return res.status(200).json({ acknowledged: false, reason: 'no_reward_to_acknowledge' })
     }
 
     if (referral.referrerAcked === true) {
