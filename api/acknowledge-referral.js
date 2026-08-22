@@ -1,5 +1,5 @@
-import { getFirebaseAdmin, getFirestore } from './lib/firebaseAdmin.js'
-import { enforceRateLimit, RateLimitError } from './lib/rateLimit.js'
+import { getFirebaseAdmin, getFirestore } from '../lib/firebaseAdmin.js'
+import { enforceRateLimit, RateLimitError } from '../lib/rateLimit.js'
 
 const ALLOWED_ORIGINS = [
   'https://tailorpady.web.app',
@@ -52,7 +52,6 @@ export default async function handler(req, res) {
     }
 
     const referral = referralSnap.data()
-
     if (referral.referrerUid !== uid) {
       return res.status(403).json({ error: 'Not authorized to acknowledge this referral' })
     }
