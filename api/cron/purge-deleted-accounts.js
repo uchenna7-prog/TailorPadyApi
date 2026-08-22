@@ -1,6 +1,6 @@
 import admin from 'firebase-admin'
-import { getFirebaseAdmin, getFirestore } from '../lib/firebaseAdmin.js'
-import { destroyCloudinaryImage, extractPublicIdFromUrl } from '../lib/cloudinary.js'
+import { getFirebaseAdmin, getFirestore } from '../../lib/firebaseAdmin.js'
+import { destroyCloudinaryImage, extractPublicIdFromUrl } from '../../lib/cloudinary.js'
 
 const GRACE_PERIOD_DAYS = 30
 
@@ -53,6 +53,14 @@ async function collectCloudinaryPublicIds(db, uid) {
   return [...publicIds]
 }
 
+async function deleteAuthUserIfExists(app, uid) {
+  try {
+    await app.auth().deleteUser(uid)
+  } catch (err) {
+    if (err.code !== 'auth/user-not-found') throw err
+  }
+}
+
 export default async function handler(req, res) {
   const authHeader = req.headers.authorization
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -83,6 +91,8 @@ export default async function handler(req, res) {
         publicIds.map(publicId => destroyCloudinaryImage(publicId).catch(() => {}))
       )
 
+      await deleteAuthUserIfExists(app, uid)
+
       const slugSnap = await db.collection('slugs').where('uid', '==', uid).get()
       if (!slugSnap.empty) {
         const slugBatch = db.batch()
@@ -91,7 +101,6 @@ export default async function handler(req, res) {
       }
 
       await db.recursiveDelete(db.doc(`users/${uid}`))
-      await app.auth().deleteUser(uid)
 
       results.push({ uid, status: 'purged', imagesDeleted: publicIds.length })
     } catch (err) {
@@ -104,4 +113,8 @@ export default async function handler(req, res) {
     purged: results.filter(r => r.status === 'purged').length,
     results,
   })
+}
+
+export const config = {
+  maxDuration: 300,
 }
