@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { getFirestore } from './lib/firebaseAdmin.js'
+import { getFirestore } from '../lib/firebaseAdmin.js'
 
 export const config = {
   api: { bodyParser: false },
