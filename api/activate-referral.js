@@ -1,5 +1,5 @@
-import { getFirebaseAdmin, getFirestore } from './lib/firebaseAdmin.js'
-import { enforceRateLimit, RateLimitError } from './lib/rateLimit.js'
+import { getFirebaseAdmin, getFirestore } from '../lib/firebaseAdmin.js'
+import { enforceRateLimit, RateLimitError } from '../lib/rateLimit.js'
 
 const ALLOWED_ORIGINS = [
   'https://tailorpady.web.app',
