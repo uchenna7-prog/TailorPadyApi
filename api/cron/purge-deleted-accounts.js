@@ -1,7 +1,57 @@
 import admin from 'firebase-admin'
 import { getFirebaseAdmin, getFirestore } from '../lib/firebaseAdmin.js'
+import { destroyCloudinaryImage, extractPublicIdFromUrl } from '../lib/cloudinary.js'
 
 const GRACE_PERIOD_DAYS = 30
+
+function scanEntryForPublicIds(key, value, publicIds) {
+  if (value == null) return
+
+  if (typeof value === 'string') {
+    if (/publicid/i.test(key)) {
+      publicIds.add(value)
+      return
+    }
+    if (value.includes('cloudinary.com')) {
+      const extracted = extractPublicIdFromUrl(value)
+      if (extracted) publicIds.add(extracted)
+    }
+    return
+  }
+
+  if (Array.isArray(value)) {
+    if (/publicid/i.test(key)) {
+      value.forEach(v => { if (typeof v === 'string') publicIds.add(v) })
+      return
+    }
+    value.forEach(v => scanEntryForPublicIds(key, v, publicIds))
+    return
+  }
+
+  if (typeof value === 'object' && typeof value.toDate !== 'function') {
+    Object.entries(value).forEach(([k, v]) => scanEntryForPublicIds(k, v, publicIds))
+  }
+}
+
+async function scanDocRecursive(docSnap, publicIds) {
+  if (docSnap.exists) {
+    Object.entries(docSnap.data()).forEach(([k, v]) => scanEntryForPublicIds(k, v, publicIds))
+  }
+  const subcollections = await docSnap.ref.listCollections()
+  for (const col of subcollections) {
+    const colSnap = await col.get()
+    for (const d of colSnap.docs) {
+      await scanDocRecursive(d, publicIds)
+    }
+  }
+}
+
+async function collectCloudinaryPublicIds(db, uid) {
+  const publicIds = new Set()
+  const userDocSnap = await db.doc(`users/${uid}`).get()
+  await scanDocRecursive(userDocSnap, publicIds)
+  return [...publicIds]
+}
 
 export default async function handler(req, res) {
   const authHeader = req.headers.authorization
@@ -28,7 +78,11 @@ export default async function handler(req, res) {
   for (const userDoc of snap.docs) {
     const uid = userDoc.id
     try {
-      // Free up any portfolio slug reserved by this account
+      const publicIds = await collectCloudinaryPublicIds(db, uid)
+      await Promise.all(
+        publicIds.map(publicId => destroyCloudinaryImage(publicId).catch(() => {}))
+      )
+
       const slugSnap = await db.collection('slugs').where('uid', '==', uid).get()
       if (!slugSnap.empty) {
         const slugBatch = db.batch()
@@ -36,13 +90,10 @@ export default async function handler(req, res) {
         await slugBatch.commit()
       }
 
-      // Wipes users/{uid} AND every subcollection beneath it —
-      // customers, orders, invoices, payments, measurements, appointments,
-      // gallery, inventory, agent data, usage, portfolioSettings, everything.
       await db.recursiveDelete(db.doc(`users/${uid}`))
-
       await app.auth().deleteUser(uid)
-      results.push({ uid, status: 'purged' })
+
+      results.push({ uid, status: 'purged', imagesDeleted: publicIds.length })
     } catch (err) {
       console.error(`Failed to purge user ${uid}:`, err)
       results.push({ uid, status: 'error', message: err.message })
