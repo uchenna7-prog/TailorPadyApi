@@ -1,5 +1,5 @@
-import { getFirebaseAdmin, getFirestore } from './lib/firebaseAdmin.js'
-import { enforceRateLimit, RateLimitError } from './lib/rateLimit.js'
+import { getFirebaseAdmin, getFirestore } from '../lib/firebaseAdmin.js'
+import { enforceRateLimit, RateLimitError } from '../lib/rateLimit.js'
 
 const ALLOWED_ORIGINS = [
   'https://tailorpady.web.app',
@@ -9,7 +9,6 @@ const ALLOWED_ORIGINS = [
 const CODE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
 const CODE_LENGTH = 6
 const MAX_ATTEMPTS = 5
-
 const RATE_LIMIT_KEY = 'create-user-profile'
 const RATE_LIMIT_MAX = 5
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
@@ -68,9 +67,9 @@ export default async function handler(req, res) {
     }
 
     const { referredByCode } = req.body || {}
-
     let referrerUid = null
     let normalizedCode = null
+
     if (referredByCode && typeof referredByCode === 'string') {
       normalizedCode = referredByCode.trim().toUpperCase()
       const codeSnap = await db.doc(`referralCodes/${normalizedCode}`).get()
