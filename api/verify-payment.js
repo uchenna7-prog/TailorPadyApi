@@ -1,4 +1,4 @@
-import { getFirestore } from './lib/firebaseAdmin.js'
+import { getFirestore } from '../lib/firebaseAdmin.js'
 
 const ALLOWED_ORIGINS = [
   'https://tailorpady.web.app',
@@ -58,7 +58,6 @@ export default async function handler(req, res) {
     ).toISOString()
 
     const db = getFirestore()
-
     await db.doc(`users/${uid}/settings/premium`).set({
       isPremium: true,
       plan: plan.label,
