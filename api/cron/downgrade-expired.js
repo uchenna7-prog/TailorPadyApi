@@ -1,4 +1,4 @@
-import { getFirestore } from '../lib/firebaseAdmin.js'
+import { getFirestore } from '../../lib/firebaseAdmin.js'
 
 export default async function handler(req, res) {
   const authHeader = req.headers.authorization
