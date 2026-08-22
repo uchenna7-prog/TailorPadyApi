@@ -25,7 +25,6 @@ export default async function handler(req, res) {
       deletionRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true })
 
-    // Invalidates their current session so a stale ID token can't keep working
     await app.auth().revokeRefreshTokens(uid)
 
     return res.status(200).json({ success: true })
