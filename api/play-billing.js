@@ -7,8 +7,8 @@ const ALLOWED_ORIGINS = [
 ]
 
 const PLANS = {
-  monthly: { basePlanId: 'monthly', label: 'Pro Monthly' },
-  annual: { basePlanId: 'annual', label: 'Pro Annual' },
+  monthly: { productId: 'pro_monthly', label: 'Pro Monthly' },
+  annual: { productId: 'pro_annually', label: 'Pro Annual' },
 }
 
 const ACTIVE_STATES = new Set([
@@ -48,13 +48,13 @@ async function handleVerify(req, res) {
     }
 
     const lineItem = purchase.lineItems?.[0]
-    const basePlanId = lineItem?.offerDetails?.basePlanId
-    if (basePlanId !== plan.basePlanId) {
-      return res.status(400).json({ error: 'Base plan mismatch' })
+    const productId = lineItem?.productId
+    if (productId !== plan.productId) {
+      return res.status(400).json({ error: 'Product mismatch' })
     }
 
     if (purchase.acknowledgementState !== 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED') {
-      await acknowledgeSubscriptionPurchase(purchaseToken)
+      await acknowledgeSubscriptionPurchase(purchaseToken, plan.productId)
     }
 
     const paidAt = new Date().toISOString()
