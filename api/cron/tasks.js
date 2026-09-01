@@ -4,6 +4,7 @@ import { destroyCloudinaryImage, extractPublicIdFromUrl } from '../../lib/cloudi
 import { sendPushToUser, sendBroadcast } from '../../lib/webpush.js'
 
 const GRACE_PERIOD_DAYS = 30
+const RATE_LIMIT_CLEANUP_BATCH_SIZE = 400
 
 function daysUntil(dateStr) {
   if (!dateStr) return null
@@ -246,6 +247,35 @@ async function runDailyDigest(db) {
   }
 }
 
+async function runCleanupRateLimits(db) {
+  const now = admin.firestore.Timestamp.now()
+
+  let deletedTotal = 0
+  let keepGoing = true
+
+  while (keepGoing) {
+    const snap = await db
+      .collection('rateLimits')
+      .where('expiresAt', '<=', now)
+      .limit(RATE_LIMIT_CLEANUP_BATCH_SIZE)
+      .get()
+
+    if (snap.empty) {
+      keepGoing = false
+      break
+    }
+
+    const batch = db.batch()
+    snap.docs.forEach(doc => batch.delete(doc.ref))
+    await batch.commit()
+
+    deletedTotal += snap.size
+    keepGoing = snap.size === RATE_LIMIT_CLEANUP_BATCH_SIZE
+  }
+
+  return { deleted: deletedTotal }
+}
+
 export default async function handler(req, res) {
   const authHeader = req.headers.authorization
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -269,6 +299,11 @@ export default async function handler(req, res) {
     if (job === 'daily-digest') {
       const db = getFirestore()
       return res.status(200).json(await runDailyDigest(db))
+    }
+
+    if (job === 'cleanup-rate-limits') {
+      const db = getFirestore()
+      return res.status(200).json(await runCleanupRateLimits(db))
     }
 
     if (job === 'broadcast') {
