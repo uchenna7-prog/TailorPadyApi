@@ -1,7 +1,7 @@
 import admin from 'firebase-admin'
 import { getFirebaseAdmin, getFirestore } from '../../lib/firebaseAdmin.js'
 import { destroyCloudinaryImage, extractPublicIdFromUrl } from '../../lib/cloudinary.js'
-import { sendPushToUser } from '../../lib/webpush.js'
+import { sendPushToUser, sendBroadcast } from '../../lib/webpush.js'
 
 const GRACE_PERIOD_DAYS = 30
 
@@ -269,6 +269,14 @@ export default async function handler(req, res) {
     if (job === 'daily-digest') {
       const db = getFirestore()
       return res.status(200).json(await runDailyDigest(db))
+    }
+
+    if (job === 'broadcast') {
+      const { title, body } = req.body || {}
+      if (!title || !body) {
+        return res.status(400).json({ error: 'Missing title or body' })
+      }
+      return res.status(200).json(await sendBroadcast({ title, body }))
     }
 
     return res.status(400).json({ error: 'Unknown or missing job' })
