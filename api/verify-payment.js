@@ -1,4 +1,5 @@
 import { getFirestore } from '../lib/firebaseAdmin.js'
+import { sendPushToUser } from '../lib/webpush.js'
 
 const ALLOWED_ORIGINS = [
   'https://tailorpady.web.app',
@@ -80,6 +81,11 @@ export default async function handler(req, res) {
     if (customerCode) {
       await db.doc(`paystackCustomers/${customerCode}`).set({ uid }, { merge: true })
     }
+
+    sendPushToUser(uid, {
+      title: 'Payment successful',
+      body: `Your ${plan.label} subscription is now active.`,
+    }).catch(err => console.error('Push notification failed:', err.message))
 
     return res.status(200).json({
       success: true,
