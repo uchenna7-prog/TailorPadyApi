@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/tasks?job=daily-digest",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/tasks?job=cleanup-rate-limits",
+      "schedule": "0 3 * * 0"
     }
   ]
 }
