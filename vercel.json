@@ -1,12 +1,16 @@
 {
   "crons": [
     {
-      "path": "/api/cron/downgrade-expired",
+      "path": "/api/cron/tasks?job=downgrade-expired",
       "schedule": "0 1 * * *"
     },
     {
-      "path": "/api/cron/purge-deleted-accounts",
+      "path": "/api/cron/tasks?job=purge-deleted-accounts",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/tasks?job=daily-digest",
+      "schedule": "0 6 * * *"
     }
   ]
 }
