@@ -1,7 +1,7 @@
 import admin from 'firebase-admin'
 import { getFirebaseAdmin, getFirestore } from '../../lib/firebaseAdmin.js'
 import { destroyCloudinaryImage, extractPublicIdFromUrl } from '../../lib/cloudinary.js'
-import { sendPushToUser, sendBroadcast } from '../../lib/webpush.js'
+import { sendPushToUser, sendBroadcast } from '../../lib/fcm.js'
 
 const GRACE_PERIOD_DAYS = 30
 const RATE_LIMIT_CLEANUP_BATCH_SIZE = 400
@@ -217,7 +217,7 @@ async function buildDigestForUser(db, uid) {
   return items
 }
 
-async function runDailyDigest(db) {
+async function runDailyDigest(app, db) {
   const subsSnap = await db.collectionGroup('pushSubscriptions').get()
 
   if (subsSnap.empty) {
@@ -243,7 +243,7 @@ async function runDailyDigest(db) {
         ? items[0]
         : `${items[0]} +${items.length - 1} more`
 
-      await sendPushToUser(uid, {
+      await sendPushToUser(app, db, uid, {
         title: 'Your TailorPady summary',
         body,
       })
@@ -325,7 +325,9 @@ export default async function handler(req, res) {
     }
 
     try {
-      return res.status(200).json(await sendBroadcast({ title, body }))
+      const app = getFirebaseAdmin()
+      const db = getFirestore()
+      return res.status(200).json(await sendBroadcast(app, db, { title, body }))
     } catch (err) {
       console.error('Broadcast failed:', err)
       return res.status(500).json({ error: err.message })
@@ -350,8 +352,9 @@ export default async function handler(req, res) {
     }
 
     if (job === 'daily-digest') {
+      const app = getFirebaseAdmin()
       const db = getFirestore()
-      return res.status(200).json(await runDailyDigest(db))
+      return res.status(200).json(await runDailyDigest(app, db))
     }
 
     if (job === 'cleanup-rate-limits') {
@@ -369,6 +372,3 @@ export default async function handler(req, res) {
 export const config = {
   maxDuration: 300,
 }
-
-
-
