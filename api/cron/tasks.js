@@ -276,13 +276,46 @@ async function runCleanupRateLimits(db) {
   return { deleted: deletedTotal }
 }
 
+async function verifyAdmin(req) {
+  const authHeader = req.headers.authorization || ''
+  const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!idToken) return false
+
+  try {
+    const app = getFirebaseAdmin()
+    const decoded = await app.auth().verifyIdToken(idToken)
+    return decoded.uid === process.env.ADMIN_UID
+  } catch {
+    return false
+  }
+}
+
 export default async function handler(req, res) {
+  const job = req.query.job
+
+  if (job === 'broadcast') {
+    const isAdmin = await verifyAdmin(req)
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Not authorized' })
+    }
+
+    const { title, body } = req.body || {}
+    if (!title || !body) {
+      return res.status(400).json({ error: 'Missing title or body' })
+    }
+
+    try {
+      return res.status(200).json(await sendBroadcast({ title, body }))
+    } catch (err) {
+      console.error('Broadcast failed:', err)
+      return res.status(500).json({ error: err.message })
+    }
+  }
+
   const authHeader = req.headers.authorization
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).end()
   }
-
-  const job = req.query.job
 
   try {
     if (job === 'downgrade-expired') {
@@ -304,14 +337,6 @@ export default async function handler(req, res) {
     if (job === 'cleanup-rate-limits') {
       const db = getFirestore()
       return res.status(200).json(await runCleanupRateLimits(db))
-    }
-
-    if (job === 'broadcast') {
-      const { title, body } = req.body || {}
-      if (!title || !body) {
-        return res.status(400).json({ error: 'Missing title or body' })
-      }
-      return res.status(200).json(await sendBroadcast({ title, body }))
     }
 
     return res.status(400).json({ error: 'Unknown or missing job' })
