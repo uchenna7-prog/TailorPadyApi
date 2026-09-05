@@ -30,8 +30,8 @@ function daysUntil(dateStr) {
 
 function isInvoiceOverdue(inv) {
   if (inv.status === 'paid') return false
-  if (!inv.due) return false
-  return new Date(inv.due + 'T23:59:59') < new Date()
+  if (!inv.dueRaw) return false
+  return new Date(inv.dueRaw + 'T23:59:59') < new Date()
 }
 
 function birthdayDaysUntil(birthdayStr) {
