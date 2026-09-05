@@ -181,7 +181,7 @@ async function buildDigestForUser(db, uid) {
   ordersSnap.docs.forEach(d => {
     const o = d.data()
     if (['completed', 'delivered', 'cancelled'].includes(o.status)) return
-    const diff = daysUntil(o.dueDate)
+    const diff = daysUntil(o.dueDate || o.dueRaw)
     if (diff === null) return
     if (diff < 0) items.push(`Order overdue: ${o.desc || 'Order'}`)
     else if (diff === 0) items.push(`Order due today: ${o.desc || 'Order'}`)
@@ -343,7 +343,6 @@ export default async function handler(req, res) {
     if (job === 'downgrade-expired') {
       const db = getFirestore()
       const result = await runDowngradeExpired(db)
-      console.log('downgrade-expired result:', JSON.stringify(result))
       return res.status(200).json(result)
     }
 
@@ -351,7 +350,6 @@ export default async function handler(req, res) {
       const app = getFirebaseAdmin()
       const db = getFirestore()
       const result = await runPurgeDeletedAccounts(app, db)
-      console.log('purge-deleted-accounts result:', JSON.stringify(result))
       return res.status(200).json(result)
     }
 
@@ -359,14 +357,12 @@ export default async function handler(req, res) {
       const app = getFirebaseAdmin()
       const db = getFirestore()
       const result = await runDailyDigest(app, db)
-      console.log('daily-digest result:', JSON.stringify(result))
       return res.status(200).json(result)
     }
 
     if (job === 'cleanup-rate-limits') {
       const db = getFirestore()
       const result = await runCleanupRateLimits(db)
-      console.log('cleanup-rate-limits result:', JSON.stringify(result))
       return res.status(200).json(result)
     }
 
