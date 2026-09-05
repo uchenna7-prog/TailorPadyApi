@@ -247,7 +247,7 @@ async function runDailyDigest(app, db) {
         title: 'Your TailorPady summary',
         body,
       })
-      results.push({ uid, status: 'sent', count: items.length })
+      results.push({ uid, status: 'sent', count: items.length, items })
     } catch (err) {
       console.error(`Digest failed for ${uid}:`, err.message)
       results.push({ uid, status: 'error', message: err.message })
@@ -342,24 +342,32 @@ export default async function handler(req, res) {
   try {
     if (job === 'downgrade-expired') {
       const db = getFirestore()
-      return res.status(200).json(await runDowngradeExpired(db))
+      const result = await runDowngradeExpired(db)
+      console.log('downgrade-expired result:', JSON.stringify(result))
+      return res.status(200).json(result)
     }
 
     if (job === 'purge-deleted-accounts') {
       const app = getFirebaseAdmin()
       const db = getFirestore()
-      return res.status(200).json(await runPurgeDeletedAccounts(app, db))
+      const result = await runPurgeDeletedAccounts(app, db)
+      console.log('purge-deleted-accounts result:', JSON.stringify(result))
+      return res.status(200).json(result)
     }
 
     if (job === 'daily-digest') {
       const app = getFirebaseAdmin()
       const db = getFirestore()
-      return res.status(200).json(await runDailyDigest(app, db))
+      const result = await runDailyDigest(app, db)
+      console.log('daily-digest result:', JSON.stringify(result))
+      return res.status(200).json(result)
     }
 
     if (job === 'cleanup-rate-limits') {
       const db = getFirestore()
-      return res.status(200).json(await runCleanupRateLimits(db))
+      const result = await runCleanupRateLimits(db)
+      console.log('cleanup-rate-limits result:', JSON.stringify(result))
+      return res.status(200).json(result)
     }
 
     return res.status(400).json({ error: 'Unknown or missing job' })
