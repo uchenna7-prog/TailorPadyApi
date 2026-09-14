@@ -91,6 +91,24 @@ async function collectCloudinaryPublicIds(db, uid) {
   return [...publicIds]
 }
 
+async function retainBillingRecords(db, uid) {
+  const paymentsSnap = await db.collection(`users/${uid}/subscriptionPayments`).get()
+  if (paymentsSnap.empty) return 0
+
+  const batch = db.batch()
+  paymentsSnap.docs.forEach(doc => {
+    const ref = db.doc(`retainedBillingRecords/${uid}/subscriptionPayments/${doc.id}`)
+    batch.set(ref, {
+      ...doc.data(),
+      uid,
+      retainedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+  })
+  await batch.commit()
+
+  return paymentsSnap.docs.length
+}
+
 async function deleteAuthUserIfExists(app, uid) {
   try {
     await app.auth().deleteUser(uid)
@@ -140,6 +158,7 @@ async function runPurgeDeletedAccounts(app, db) {
   for (const userDoc of snap.docs) {
     const uid = userDoc.id
     try {
+      const billingRecordsRetained = await retainBillingRecords(db, uid)
       const publicIds = await collectCloudinaryPublicIds(db, uid)
       await Promise.all(
         publicIds.map(publicId => destroyCloudinaryImage(publicId).catch(() => {}))
@@ -154,7 +173,7 @@ async function runPurgeDeletedAccounts(app, db) {
       }
 
       await db.recursiveDelete(db.doc(`users/${uid}`))
-      results.push({ uid, status: 'purged', imagesDeleted: publicIds.length })
+      results.push({ uid, status: 'purged', imagesDeleted: publicIds.length, billingRecordsRetained })
     } catch (err) {
       console.error(`Failed to purge user ${uid}:`, err)
       results.push({ uid, status: 'error', message: err.message })
