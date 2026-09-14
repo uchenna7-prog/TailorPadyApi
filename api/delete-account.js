@@ -1,6 +1,11 @@
 import admin from 'firebase-admin'
 import { getFirebaseAdmin, getFirestore } from '../lib/firebaseAdmin.js'
 
+const ALLOWED_ORIGINS = [
+  'https://tailorpady.web.app',
+  'http://localhost:5173',
+]
+
 async function startDeletion(app, db, uid, extra = {}) {
   await app.auth().setCustomUserClaims(uid, { pendingDeletion: true })
   await db.doc(`users/${uid}`).set({
@@ -81,6 +86,16 @@ async function handleSelfServiceRequest(req, res, app, db) {
 }
 
 export default async function handler(req, res) {
+  const origin = req.headers.origin
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
+  }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const app = getFirebaseAdmin()
