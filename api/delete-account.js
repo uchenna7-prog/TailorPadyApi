@@ -76,6 +76,18 @@ async function handleSelfServiceRequest(req, res, app, db) {
     return res.status(401).json({ error: 'Invalid or expired token' })
   }
 
+  const { action } = req.body || {}
+
+  if (action === 'reactivate') {
+    try {
+      const result = await cancelDeletion(app, db, decoded.uid)
+      return res.status(200).json({ success: true, ...result })
+    } catch (err) {
+      console.error('reactivate account error:', err)
+      return res.status(500).json({ error: 'Could not reactivate account' })
+    }
+  }
+
   try {
     await startDeletion(app, db, decoded.uid, { requestedVia: 'app' })
     return res.status(200).json({ success: true })
