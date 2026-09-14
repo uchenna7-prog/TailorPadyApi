@@ -72,6 +72,7 @@ async function handleChargeSuccess(db, ref, event, uid) {
       billingCycle,
       status: 'paid',
       paidAt,
+      billingProvider: 'paystack',
     })
   }
 }
@@ -109,6 +110,7 @@ async function handlePaymentFailed(db, ref, event, uid) {
     billingCycle: null,
     status: 'failed',
     paidAt: failedAt,
+    billingProvider: 'paystack',
   })
 }
 
